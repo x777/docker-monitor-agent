@@ -15,7 +15,7 @@ NC='\033[0m' # No Color
 # Configuration
 AGENT_TOKEN=${AGENT_TOKEN:-""}
 AGENT_PORT=${AGENT_PORT:-"8080"}
-DOCKER_IMAGE=${DOCKER_IMAGE:-"docker-monitor/docker-agent:latest"}
+IMAGE_NAME=${IMAGE_NAME:-"docker-monitor-agent"}
 
 # Function to print colored output
 print_status() {
@@ -102,13 +102,25 @@ stop_existing_agent() {
     fi
 }
 
+# Function to build agent image
+build_agent() {
+    print_status "Building agent image..."
+    
+    # Check if we're in the agent directory
+    if [ ! -f "Dockerfile" ]; then
+        print_error "Dockerfile not found. Please run this script from the agent directory."
+        exit 1
+    fi
+    
+    # Build the image
+    docker build -t $IMAGE_NAME .
+    
+    print_success "Agent image built successfully"
+}
+
 # Function to deploy agent
 deploy_agent() {
     print_status "Deploying Docker Monitor Agent..."
-    
-    # Pull latest image
-    print_status "Pulling latest image..."
-    docker pull $DOCKER_IMAGE
     
     # Run agent container
     print_status "Starting agent container..."
@@ -121,7 +133,7 @@ deploy_agent() {
         -e DOCKER_SOCKET=/var/run/docker.sock \
         -e HOST=0.0.0.0 \
         -e PORT=8080 \
-        $DOCKER_IMAGE
+        $IMAGE_NAME
     
     print_success "Agent container started"
 }
@@ -196,6 +208,9 @@ main() {
     
     # Stop existing agent if running
     stop_existing_agent
+    
+    # Build agent image
+    build_agent
     
     # Deploy agent
     deploy_agent

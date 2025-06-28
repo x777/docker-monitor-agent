@@ -4,49 +4,42 @@ Lightweight agent for monitoring Docker containers on remote servers.
 
 ## 🚀 Quick Start
 
-### Deploy with Docker Hub (Recommended)
+### Deploy with Local Build (Recommended)
 
 ```bash
-# Pull and run the agent
+# Clone the repository
+git clone https://github.com/x777/docker-monitor-agent.git
+cd docker-monitor-agent
+
+# Create environment file
+cp env.example .env
+# Edit .env and set your AGENT_TOKEN
+
+# Build and deploy with Docker Compose
+docker-compose up -d --build
+```
+
+### Deploy with Docker Run
+
+```bash
+# Clone and build locally
+git clone https://github.com/x777/docker-monitor-agent.git
+cd docker-monitor-agent
+
+# Build the image
+docker build -t docker-monitor-agent .
+
+# Generate token and run
+AGENT_TOKEN=$(openssl rand -hex 32)
 docker run -d \
   --name docker-monitor-agent \
   --restart unless-stopped \
   -v /var/run/docker.sock:/var/run/docker.sock:ro \
   -p 8080:8080 \
-  -e AGENT_TOKEN=your-secure-token \
-  docker-monitor/docker-agent:latest
-```
+  -e AGENT_TOKEN=$AGENT_TOKEN \
+  docker-monitor-agent
 
-### Deploy with Docker Compose
-
-```bash
-# Create .env file
-cat > .env << EOF
-AGENT_TOKEN=your-secure-token
-AGENT_PORT=8080
-EOF
-
-# Create docker-compose.yml
-cat > docker-compose.yml << EOF
-version: '3.8'
-services:
-  agent:
-    image: docker-monitor/docker-agent:latest
-    container_name: docker-monitor-agent
-    restart: unless-stopped
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    ports:
-      - "\${AGENT_PORT:-8080}:8080"
-    environment:
-      - AGENT_TOKEN=\${AGENT_TOKEN}
-      - DOCKER_SOCKET=/var/run/docker.sock
-      - HOST=0.0.0.0
-      - PORT=8080
-EOF
-
-# Deploy
-docker-compose up -d
+echo "Agent deployed with token: $AGENT_TOKEN"
 ```
 
 ### Deploy with Script
@@ -133,6 +126,18 @@ curl -H "Authorization: Bearer YOUR_TOKEN" http://localhost:8080/health
    docker-compose up -d
    ```
 
+3. **Build fails**:
+   ```bash
+   # Check Dockerfile
+   cat Dockerfile
+   
+   # Check requirements
+   cat requirements.txt
+   
+   # Rebuild
+   docker-compose build --no-cache
+   ```
+
 ## 🛡️ Security
 
 - Use unique, secure tokens for each server
@@ -151,4 +156,4 @@ After deployment, add the server to your dashboard:
 
 - [Documentation](https://github.com/x777/docker-monitor-agent)
 - [Issues](https://github.com/x777/docker-monitor-agent/issues)
-- [Releases](https://github.com/x777/docker-monitor-agent/releases) 
+- [Releases](https://github.com/x777/docker-monitor-agent/releases)
