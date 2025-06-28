@@ -305,6 +305,12 @@ async def get_monitored_containers_metrics(
 # В самом конце файла:
 app.include_router(router)
 
+print("🔧 Router included with prefix /api")
+print("📋 Available routes:")
+for route in app.routes:
+    if hasattr(route, 'path'):
+        print(f"  - {route.path}")
+
 if __name__ == "__main__":
     uvicorn.run(
         "main:app",
