@@ -43,6 +43,12 @@ app.add_middleware(
 # Новый роутер с префиксом /api
 router = APIRouter(prefix="/api")
 
+# Старый эндпоинт для совместимости
+@app.get("/health")
+async def health_check_legacy():
+    """Legacy health check endpoint for external services"""
+    return await health_check()
+
 @router.get("/")
 async def root():
     """Root endpoint"""
