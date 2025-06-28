@@ -56,25 +56,35 @@ async def root():
 
 async def verify_token(authorization: Optional[str] = Header(None)):
     """Verify agent token"""
+    print(f"🔐 Received authorization header: {authorization}")
+    print(f"🔑 Expected token: {AGENT_TOKEN}")
+    
     if not authorization:
+        print("❌ No authorization header")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authorization header required"
         )
     
     if not authorization.startswith("Bearer "):
+        print("❌ Invalid authorization format")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authorization header format"
         )
     
     token = authorization.replace("Bearer ", "")
+    print(f"🔑 Received token: {token}")
+    print(f"🔑 Token match: {token == AGENT_TOKEN}")
+    
     if token != AGENT_TOKEN:
+        print("❌ Token mismatch!")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token"
         )
     
+    print("✅ Token verified successfully")
     return token
 
 
