@@ -41,12 +41,23 @@ check_docker() {
 
 # Check if Docker Compose is installed
 check_docker_compose() {
-    if ! command -v docker-compose &> /dev/null; then
-        print_error "Docker Compose is not installed. Please install Docker Compose first."
-        exit 1
+    # Check for docker-compose (old version)
+    if command -v docker-compose &> /dev/null; then
+        print_status "Docker Compose (legacy) is installed"
+        return 0
     fi
     
-    print_status "Docker Compose is installed"
+    # Check for docker compose (new version)
+    if docker compose version &> /dev/null; then
+        print_status "Docker Compose (new) is installed"
+        return 0
+    fi
+    
+    print_error "Docker Compose is not installed. Please install Docker Compose first."
+    print_status "You can install it with:"
+    print_status "  - For new Docker versions: docker compose is included"
+    print_status "  - For legacy: sudo apt-get install docker-compose"
+    exit 1
 }
 
 # Generate secure token
@@ -101,10 +112,13 @@ deploy() {
     print_status "Building and deploying agent..."
     
     # Stop existing containers
-    docker-compose down 2>/dev/null || true
-    
-    # Build and start
-    docker-compose up -d --build
+    if command -v docker-compose &> /dev/null; then
+        docker-compose down 2>/dev/null || true
+        docker-compose up -d --build
+    else
+        docker compose down 2>/dev/null || true
+        docker compose up -d --build
+    fi
     
     print_status "Agent deployed successfully!"
 }
@@ -128,7 +142,12 @@ wait_for_agent() {
     done
     
     print_error "Agent failed to start within 60 seconds"
-    print_status "Check logs with: docker-compose logs agent"
+    print_status "Check logs with:"
+    if command -v docker-compose &> /dev/null; then
+        print_status "  docker-compose logs agent"
+    else
+        print_status "  docker compose logs agent"
+    fi
     return 1
 }
 
@@ -170,9 +189,15 @@ show_info() {
     echo "  Token: $(grep AGENT_TOKEN .env | cut -d'=' -f2)"
     echo
     echo "Useful commands:"
-    echo "  View logs: docker-compose logs -f agent"
-    echo "  Stop agent: docker-compose down"
-    echo "  Restart agent: docker-compose restart"
+    if command -v docker-compose &> /dev/null; then
+        echo "  View logs: docker-compose logs -f agent"
+        echo "  Stop agent: docker-compose down"
+        echo "  Restart agent: docker-compose restart"
+    else
+        echo "  View logs: docker compose logs -f agent"
+        echo "  Stop agent: docker compose down"
+        echo "  Restart agent: docker compose restart"
+    fi
     echo
     echo "To add this server to your dashboard:"
     echo "  1. Go to your dashboard"
