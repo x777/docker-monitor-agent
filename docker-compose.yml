@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   agent:
     build: .
@@ -14,6 +12,7 @@ services:
       - DOCKER_SOCKET=/var/run/docker.sock
       - HOST=0.0.0.0
       - PORT=8080
+    user: "0:0"  # Запуск от root для доступа к Docker socket
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
