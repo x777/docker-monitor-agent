@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Docker Monitor Agent Deployment Script
-# This script deploys the agent on a remote server
+# This script helps you quickly deploy the agent on a remote server
 
 set -e
 
@@ -9,21 +9,11 @@ set -e
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
 NC='\033[0m' # No Color
-
-# Configuration
-AGENT_TOKEN=${AGENT_TOKEN:-""}
-AGENT_PORT=${AGENT_PORT:-"8080"}
-IMAGE_NAME=${IMAGE_NAME:-"docker-monitor-agent"}
 
 # Function to print colored output
 print_status() {
-    echo -e "${BLUE}[INFO]${NC} $1"
-}
-
-print_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
+    echo -e "${GREEN}[INFO]${NC} $1"
 }
 
 print_warning() {
@@ -34,7 +24,7 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Function to check if Docker is installed
+# Check if Docker is installed
 check_docker() {
     if ! command -v docker &> /dev/null; then
         print_error "Docker is not installed. Please install Docker first."
@@ -46,180 +36,164 @@ check_docker() {
         exit 1
     fi
     
-    print_success "Docker is available"
+    print_status "Docker is installed and running"
 }
 
-# Function to check if Docker socket is accessible
+# Check if Docker Compose is installed
+check_docker_compose() {
+    if ! command -v docker-compose &> /dev/null; then
+        print_error "Docker Compose is not installed. Please install Docker Compose first."
+        exit 1
+    fi
+    
+    print_status "Docker Compose is installed"
+}
+
+# Generate secure token
+generate_token() {
+    if command -v openssl &> /dev/null; then
+        AGENT_TOKEN=$(openssl rand -hex 32)
+    else
+        AGENT_TOKEN=$(cat /dev/urandom | tr -dc 'a-f0-9' | fold -w 32 | head -n 1)
+    fi
+    echo $AGENT_TOKEN
+}
+
+# Create environment file
+create_env_file() {
+    if [ ! -f .env ]; then
+        print_status "Creating .env file..."
+        cp env.example .env
+        
+        # Generate secure token
+        TOKEN=$(generate_token)
+        sed -i "s/your-secure-token-change-this/$TOKEN/" .env
+        
+        print_status "Generated secure token: $TOKEN"
+        print_warning "Please save this token for dashboard configuration!"
+    else
+        print_status ".env file already exists"
+    fi
+}
+
+# Check Docker socket permissions
 check_docker_socket() {
     if [ ! -S /var/run/docker.sock ]; then
         print_error "Docker socket not found at /var/run/docker.sock"
         exit 1
     fi
     
-    if [ ! -r /var/run/docker.sock ]; then
-        print_warning "Docker socket is not readable. Attempting to fix permissions..."
-        sudo chmod 666 /var/run/docker.sock
+    # Check if current user can access docker socket
+    if ! docker ps &> /dev/null; then
+        print_warning "Current user cannot access Docker socket"
+        print_status "Adding current user to docker group..."
+        sudo usermod -aG docker $USER
+        print_warning "Please log out and log back in, or run: newgrp docker"
+        print_warning "Then run this script again"
+        exit 1
     fi
     
-    print_success "Docker socket is accessible"
+    print_status "Docker socket permissions are correct"
 }
 
-# Function to generate secure token
-generate_token() {
-    if [ -z "$AGENT_TOKEN" ]; then
-        print_status "Generating secure token..."
-        AGENT_TOKEN=$(openssl rand -hex 32)
-        print_success "Generated token: $AGENT_TOKEN"
-        print_warning "Please save this token securely!"
-    else
-        print_status "Using provided token"
-    fi
+# Build and deploy
+deploy() {
+    print_status "Building and deploying agent..."
+    
+    # Stop existing containers
+    docker-compose down 2>/dev/null || true
+    
+    # Build and start
+    docker-compose up -d --build
+    
+    print_status "Agent deployed successfully!"
 }
 
-# Function to check if port is available
-check_port() {
-    if netstat -tuln | grep -q ":$AGENT_PORT "; then
-        print_warning "Port $AGENT_PORT is already in use"
-        read -p "Do you want to use a different port? (y/n): " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            read -p "Enter new port number: " AGENT_PORT
-            check_port
-        else
-            print_error "Deployment cancelled"
-            exit 1
+# Wait for agent to be ready
+wait_for_agent() {
+    print_status "Waiting for agent to be ready..."
+    
+    local max_attempts=30
+    local attempt=1
+    
+    while [ $attempt -le $max_attempts ]; do
+        if curl -s http://localhost:8080/health &> /dev/null; then
+            print_status "Agent is ready!"
+            return 0
         fi
-    fi
+        
+        echo -n "."
+        sleep 2
+        attempt=$((attempt + 1))
+    done
+    
+    print_error "Agent failed to start within 60 seconds"
+    print_status "Check logs with: docker-compose logs agent"
+    return 1
 }
 
-# Function to stop existing agent
-stop_existing_agent() {
-    if docker ps -q --filter "name=docker-monitor-agent" | grep -q .; then
-        print_status "Stopping existing agent..."
-        docker stop docker-monitor-agent || true
-        docker rm docker-monitor-agent || true
-        print_success "Existing agent stopped"
-    fi
-}
-
-# Function to build agent image
-build_agent() {
-    print_status "Building agent image..."
+# Test agent
+test_agent() {
+    print_status "Testing agent..."
     
-    # Check if we're in the agent directory
-    if [ ! -f "Dockerfile" ]; then
-        print_error "Dockerfile not found. Please run this script from the agent directory."
-        exit 1
-    fi
-    
-    # Build the image
-    docker build -t $IMAGE_NAME .
-    
-    print_success "Agent image built successfully"
-}
-
-# Function to deploy agent
-deploy_agent() {
-    print_status "Deploying Docker Monitor Agent..."
-    
-    # Run agent container
-    print_status "Starting agent container..."
-    docker run -d \
-        --name docker-monitor-agent \
-        --restart unless-stopped \
-        -v /var/run/docker.sock:/var/run/docker.sock:ro \
-        -p $AGENT_PORT:8080 \
-        -e AGENT_TOKEN=$AGENT_TOKEN \
-        -e DOCKER_SOCKET=/var/run/docker.sock \
-        -e HOST=0.0.0.0 \
-        -e PORT=8080 \
-        $IMAGE_NAME
-    
-    print_success "Agent container started"
-}
-
-# Function to verify deployment
-verify_deployment() {
-    print_status "Verifying deployment..."
-    
-    # Wait for container to start
-    sleep 5
-    
-    # Check if container is running
-    if ! docker ps --filter "name=docker-monitor-agent" --filter "status=running" | grep -q docker-monitor-agent; then
-        print_error "Agent container is not running"
-        docker logs docker-monitor-agent
-        exit 1
+    # Test root endpoint
+    if curl -s http://localhost:8080/ | grep -q "Docker Monitor Agent"; then
+        print_status "Root endpoint: OK"
+    else
+        print_error "Root endpoint: FAILED"
     fi
     
     # Test health endpoint
-    print_status "Testing health endpoint..."
-    if curl -s -f "http://localhost:$AGENT_PORT/health" > /dev/null; then
-        print_success "Health check passed"
+    if curl -s http://localhost:8080/health | grep -q "status"; then
+        print_status "Health endpoint: OK"
     else
-        print_error "Health check failed"
-        docker logs docker-monitor-agent
-        exit 1
+        print_error "Health endpoint: FAILED"
     fi
     
-    # Test authenticated endpoint
-    print_status "Testing authenticated endpoint..."
-    if curl -s -f -H "Authorization: Bearer $AGENT_TOKEN" "http://localhost:$AGENT_PORT/containers" > /dev/null; then
-        print_success "Authentication test passed"
+    # Get token for authenticated tests
+    TOKEN=$(grep AGENT_TOKEN .env | cut -d'=' -f2)
+    
+    # Test info endpoint
+    if curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8080/info | grep -q "version"; then
+        print_status "Info endpoint: OK"
     else
-        print_error "Authentication test failed"
-        exit 1
+        print_error "Info endpoint: FAILED"
     fi
 }
 
-# Function to display deployment info
-display_info() {
-    echo
-    print_success "Deployment completed successfully!"
+# Show deployment info
+show_info() {
+    print_status "Deployment completed successfully!"
     echo
     echo "Agent Information:"
-    echo "  URL: http://$(hostname -I | awk '{print $1}'):$AGENT_PORT"
-    echo "  Token: $AGENT_TOKEN"
-    echo "  Container: docker-monitor-agent"
+    echo "  URL: http://$(hostname -I | awk '{print $1}'):8080"
+    echo "  Token: $(grep AGENT_TOKEN .env | cut -d'=' -f2)"
     echo
     echo "Useful commands:"
-    echo "  View logs: docker logs -f docker-monitor-agent"
-    echo "  Stop agent: docker stop docker-monitor-agent"
-    echo "  Restart agent: docker restart docker-monitor-agent"
-    echo "  Remove agent: docker rm -f docker-monitor-agent"
+    echo "  View logs: docker-compose logs -f agent"
+    echo "  Stop agent: docker-compose down"
+    echo "  Restart agent: docker-compose restart"
     echo
-    print_warning "Remember to save the token securely!"
-    echo
+    echo "To add this server to your dashboard:"
+    echo "  1. Go to your dashboard"
+    echo "  2. Add new server"
+    echo "  3. Use the URL and token above"
 }
 
 # Main deployment process
 main() {
-    echo "Docker Monitor Agent Deployment"
-    echo "================================"
+    echo "Docker Monitor Agent Deployment Script"
+    echo "====================================="
     echo
     
-    # Check prerequisites
     check_docker
+    check_docker_compose
     check_docker_socket
-    check_port
-    
-    # Generate token if not provided
-    generate_token
-    
-    # Stop existing agent if running
-    stop_existing_agent
-    
-    # Build agent image
-    build_agent
-    
-    # Deploy agent
-    deploy_agent
-    
-    # Verify deployment
-    verify_deployment
-    
-    # Display information
-    display_info
+    create_env_file
+    deploy
+    wait_for_agent
+    test_agent
+    show_info
 }
 
 # Run main function

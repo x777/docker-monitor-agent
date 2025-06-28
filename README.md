@@ -1,159 +1,174 @@
 # Docker Monitor Agent
 
-Lightweight agent for monitoring Docker containers on remote servers.
+Легковесный агент для мониторинга Docker контейнеров. Предоставляет REST API для получения информации о контейнерах, метрик и управления ими.
 
-## 🚀 Quick Start
+## Возможности
 
-### Deploy with Local Build (Recommended)
+- 📊 Мониторинг контейнеров в реальном времени
+- 📈 Метрики CPU, памяти, сети
+- 🔧 Управление контейнерами (start/stop/restart/pause/unpause)
+- 📝 Просмотр логов контейнеров
+- 🔐 Безопасная аутентификация по токену
+- 🏥 Health check эндпоинты
+
+## Быстрый старт
+
+### 1. Клонирование и настройка
 
 ```bash
-# Clone the repository
-git clone https://github.com/x777/docker-monitor-agent.git
-cd docker-monitor-agent
-
-# Create environment file
+# Скопируйте файл конфигурации
 cp env.example .env
-# Edit .env and set your AGENT_TOKEN
 
-# Build and deploy with Docker Compose
-docker-compose up -d --build
+# Отредактируйте .env файл
+nano .env
 ```
 
-### Deploy with Docker Run
+### 2. Настройка переменных окружения
 
 ```bash
-# Clone and build locally
-git clone https://github.com/x777/docker-monitor-agent.git
-cd docker-monitor-agent
+# Обязательно измените токен агента
+AGENT_TOKEN=your-secure-token-change-this
 
-# Build the image
-docker build -t docker-monitor-agent .
-
-# Generate token and run
-AGENT_TOKEN=$(openssl rand -hex 32)
-docker run -d \
-  --name docker-monitor-agent \
-  --restart unless-stopped \
-  -v /var/run/docker.sock:/var/run/docker.sock:ro \
-  -p 8080:8080 \
-  -e AGENT_TOKEN=$AGENT_TOKEN \
-  docker-monitor-agent
-
-echo "Agent deployed with token: $AGENT_TOKEN"
+# Порт для агента (по умолчанию 8080)
+AGENT_PORT=8080
 ```
 
-### Deploy with Script
+### 3. Запуск с Docker Compose
 
 ```bash
-# Download deployment script
-curl -O https://raw.githubusercontent.com/x777/docker-monitor-agent/main/deploy.sh
-chmod +x deploy.sh
+# Сборка и запуск
+docker-compose up -d
 
-# Set token and deploy
-export AGENT_TOKEN="your-secure-token"
-./deploy.sh
+# Просмотр логов
+docker-compose logs -f agent
+
+# Остановка
+docker-compose down
 ```
 
-## 🔧 Configuration
-
-### Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `AGENT_TOKEN` | Required | Authentication token for the agent |
-| `DOCKER_SOCKET` | `/var/run/docker.sock` | Path to Docker socket |
-| `HOST` | `0.0.0.0` | Host to bind the agent to |
-| `PORT` | `8080` | Port to run the agent on |
-
-### Generate Secure Token
+### 4. Тестирование
 
 ```bash
-# Generate a secure token
-openssl rand -hex 32
+# Установите зависимости для тестирования
+pip install -r requirements.txt
+
+# Запустите тест
+python test_agent.py
 ```
 
-## 📊 API Endpoints
+## API Эндпоинты
 
-### Health Check
+### Без аутентификации
+
+- `GET /` - Информация об агенте
+- `GET /health` - Проверка состояния
+
+### С аутентификацией (Bearer Token)
+
+- `GET /containers` - Список всех контейнеров
+- `GET /containers/{id}/metrics` - Метрики контейнера
+- `GET /containers/{id}/logs` - Логи контейнера
+- `POST /containers/{id}/action` - Действия с контейнером
+- `GET /metrics` - Метрики сервера
+- `GET /info` - Информация о Docker
+
+## Примеры использования
+
+### Получение списка контейнеров
+
 ```bash
-curl -H "Authorization: Bearer YOUR_TOKEN" http://localhost:8080/health
+curl -H "Authorization: Bearer your-token" \
+     http://localhost:8080/containers
 ```
 
-### Get Containers
+### Получение метрик контейнера
+
 ```bash
-curl -H "Authorization: Bearer YOUR_TOKEN" http://localhost:8080/containers
+curl -H "Authorization: Bearer your-token" \
+     http://localhost:8080/containers/container-id/metrics
 ```
 
-### Get Server Metrics
+### Остановка контейнера
+
 ```bash
-curl -H "Authorization: Bearer YOUR_TOKEN" http://localhost:8080/metrics
+curl -X POST \
+     -H "Authorization: Bearer your-token" \
+     -H "Content-Type: application/json" \
+     -d '{"action": "stop"}' \
+     http://localhost:8080/containers/container-id/action
 ```
 
-### Container Actions
+## Устранение неполадок
+
+### Проблема: 503 Service Unavailable в /health
+
+**Причина:** Агент не может подключиться к Docker daemon
+
+**Решение:**
+1. Убедитесь, что Docker socket доступен: `ls -la /var/run/docker.sock`
+2. Проверьте права доступа: `sudo chmod 666 /var/run/docker.sock`
+3. Добавьте пользователя в группу docker: `sudo usermod -aG docker $USER`
+
+### Проблема: 404 Not Found для всех эндпоинтов
+
+**Причина:** Агент не запущен или неправильный порт
+
+**Решение:**
+1. Проверьте статус контейнера: `docker-compose ps`
+2. Просмотрите логи: `docker-compose logs agent`
+3. Убедитесь, что порт правильно проброшен
+
+### Проблема: 401 Unauthorized
+
+**Причина:** Неправильный токен аутентификации
+
+**Решение:**
+1. Проверьте переменную `AGENT_TOKEN` в `.env`
+2. Убедитесь, что токен передается в заголовке `Authorization: Bearer <token>`
+
+## Развертывание в продакшене
+
+### 1. Безопасность
+
+- Измените токен агента на сложный
+- Используйте HTTPS в продакшене
+- Ограничьте доступ к порту агента
+- Регулярно обновляйте зависимости
+
+### 2. Мониторинг
+
+- Настройте мониторинг health check эндпоинта
+- Логируйте все запросы к API
+- Настройте алерты при недоступности агента
+
+### 3. Масштабирование
+
+- Для множественных серверов используйте балансировщик нагрузки
+- Настройте централизованный сбор логов
+- Используйте Docker Swarm или Kubernetes для оркестрации
+
+## Разработка
+
+### Локальная разработка
+
 ```bash
-# Start container
-curl -X POST -H "Authorization: Bearer YOUR_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"action": "start"}' \
-  http://localhost:8080/containers/CONTAINER_ID/action
+# Установка зависимостей
+pip install -r requirements.txt
+
+# Запуск в режиме разработки
+python src/main.py
 ```
 
-## 🔍 Troubleshooting
+### Тестирование
 
-### Check Agent Status
 ```bash
-# Check if running
-docker ps | grep docker-monitor-agent
+# Запуск тестов
+python test_agent.py
 
-# View logs
-docker logs -f docker-monitor-agent
-
-# Test health
-curl -H "Authorization: Bearer YOUR_TOKEN" http://localhost:8080/health
+# Проверка health check
+curl http://localhost:8080/health
 ```
 
-### Common Issues
+## Лицензия
 
-1. **Permission denied on Docker socket**:
-   ```bash
-   sudo chmod 666 /var/run/docker.sock
-   ```
-
-2. **Port already in use**:
-   ```bash
-   # Use different port
-   export AGENT_PORT=8081
-   docker-compose up -d
-   ```
-
-3. **Build fails**:
-   ```bash
-   # Check Dockerfile
-   cat Dockerfile
-   
-   # Check requirements
-   cat requirements.txt
-   
-   # Rebuild
-   docker-compose build --no-cache
-   ```
-
-## 🛡️ Security
-
-- Use unique, secure tokens for each server
-- Restrict network access to agent ports
-- Monitor agent logs for suspicious activity
-- Regular security updates
-
-## 📋 Integration
-
-After deployment, add the server to your dashboard:
-1. Agent URL: `http://SERVER_IP:8080`
-2. Use the agent token you configured
-3. Add through dashboard interface
-
-## 📞 Support
-
-- [Documentation](https://github.com/x777/docker-monitor-agent)
-- [Issues](https://github.com/x777/docker-monitor-agent/issues)
-- [Releases](https://github.com/x777/docker-monitor-agent/releases)
+MIT License

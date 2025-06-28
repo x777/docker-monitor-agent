@@ -19,6 +19,7 @@ PORT = int(os.getenv("PORT", "8080"))
 # Initialize Docker client
 try:
     docker_client = DockerClient(DOCKER_SOCKET)
+    print(f"Docker client initialized successfully")
 except Exception as e:
     print(f"Failed to initialize Docker client: {e}")
     docker_client = None
@@ -38,6 +39,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.get("/")
+async def root():
+    """Root endpoint"""
+    return {
+        "message": "Docker Monitor Agent",
+        "version": "1.0.0",
+        "status": "running",
+        "docker_available": docker_client is not None
+    }
 
 
 async def verify_token(authorization: Optional[str] = Header(None)):
@@ -67,20 +79,27 @@ async def verify_token(authorization: Optional[str] = Header(None)):
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    if docker_client is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Docker client not available"
-        )
-    
     try:
+        if docker_client is None:
+            return {
+                "status": "unhealthy",
+                "docker": "not_available",
+                "message": "Docker client not initialized"
+            }
+        
+        # Test Docker connection
         docker_client.client.ping()
-        return {"status": "healthy", "docker": "connected"}
+        return {
+            "status": "healthy", 
+            "docker": "connected",
+            "message": "Agent is healthy and Docker is connected"
+        }
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Docker connection failed: {str(e)}"
-        )
+        return {
+            "status": "unhealthy",
+            "docker": "connection_failed",
+            "message": f"Docker connection failed: {str(e)}"
+        }
 
 
 @app.get("/containers")
