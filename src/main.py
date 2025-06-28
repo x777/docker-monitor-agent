@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, status, Header, Query
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, Header, Query
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional, List
 import uvicorn
@@ -40,8 +40,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Новый роутер с префиксом /api
+router = APIRouter(prefix="/api")
 
-@app.get("/")
+@router.get("/")
 async def root():
     """Root endpoint"""
     return {
@@ -76,7 +78,7 @@ async def verify_token(authorization: Optional[str] = Header(None)):
     return token
 
 
-@app.get("/health")
+@router.get("/health")
 async def health_check():
     """Health check endpoint"""
     try:
@@ -102,7 +104,7 @@ async def health_check():
         }
 
 
-@app.get("/containers")
+@router.get("/containers")
 async def get_containers(
     name_filter: Optional[str] = None, 
     token: str = Depends(verify_token)
@@ -124,7 +126,7 @@ async def get_containers(
         )
 
 
-@app.get("/containers/{container_id}/metrics")
+@router.get("/containers/{container_id}/metrics")
 async def get_container_metrics(container_id: str, token: str = Depends(verify_token)):
     """Get metrics for specific container"""
     if docker_client is None:
@@ -143,7 +145,7 @@ async def get_container_metrics(container_id: str, token: str = Depends(verify_t
         )
 
 
-@app.get("/metrics")
+@router.get("/metrics")
 async def get_server_metrics(token: str = Depends(verify_token)):
     """Get server-level metrics"""
     if docker_client is None:
@@ -162,7 +164,7 @@ async def get_server_metrics(token: str = Depends(verify_token)):
         )
 
 
-@app.post("/containers/{container_id}/action")
+@router.post("/containers/{container_id}/action")
 async def perform_container_action(container_id: str, action_data: dict, token: str = Depends(verify_token)):
     """Perform action on container"""
     if docker_client is None:
@@ -188,7 +190,7 @@ async def perform_container_action(container_id: str, action_data: dict, token: 
         )
 
 
-@app.get("/containers/{container_id}/logs")
+@router.get("/containers/{container_id}/logs")
 async def get_container_logs(container_id: str, tail: int = 100, token: str = Depends(verify_token)):
     """Get container logs"""
     if docker_client is None:
@@ -207,7 +209,7 @@ async def get_container_logs(container_id: str, tail: int = 100, token: str = De
         )
 
 
-@app.get("/info")
+@router.get("/info")
 async def get_docker_info(token: str = Depends(verify_token)):
     """Get Docker daemon information"""
     if docker_client is None:
@@ -226,7 +228,7 @@ async def get_docker_info(token: str = Depends(verify_token)):
         )
 
 
-@app.get("/monitored-containers")
+@router.get("/monitored-containers")
 async def get_monitored_containers(
     names: str = Query(..., description="Comma-separated container names or patterns"),
     token: str = Depends(verify_token)
@@ -264,7 +266,7 @@ async def get_monitored_containers(
         )
 
 
-@app.get("/monitored-containers/metrics")
+@router.get("/monitored-containers/metrics")
 async def get_monitored_containers_metrics(
     names: str = Query(..., description="Comma-separated container names or patterns"),
     token: str = Depends(verify_token)
@@ -300,6 +302,8 @@ async def get_monitored_containers_metrics(
             detail=f"Failed to get monitored containers metrics: {str(e)}"
         )
 
+# В самом конце файла:
+app.include_router(router)
 
 if __name__ == "__main__":
     uvicorn.run(
