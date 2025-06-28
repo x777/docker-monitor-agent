@@ -66,11 +66,24 @@ python test_agent.py
 ### С аутентификацией (Bearer Token)
 
 - `GET /containers` - Список всех контейнеров
+- `GET /containers?name_filter=pattern` - Фильтрация контейнеров по имени
+- `GET /monitored-containers?names=name1,name2` - Получение конкретных контейнеров
+- `GET /monitored-containers/metrics?names=name1,name2` - Метрики конкретных контейнеров
 - `GET /containers/{id}/metrics` - Метрики контейнера
 - `GET /containers/{id}/logs` - Логи контейнера
 - `POST /containers/{id}/action` - Действия с контейнером
 - `GET /metrics` - Метрики сервера
 - `GET /info` - Информация о Docker
+
+## Фильтрация контейнеров
+
+### Поддерживаемые паттерны:
+
+- **Точное совпадение**: `nginx` - найдет контейнер с именем "nginx"
+- **Содержит**: `*web*` - найдет контейнеры, содержащие "web" в имени
+- **Начинается с**: `app*` - найдет контейнеры, начинающиеся с "app"
+- **Заканчивается на**: `*db` - найдет контейнеры, заканчивающиеся на "db"
+- **Несколько паттернов**: `app*,*db,nginx` - найдет контейнеры по всем паттернам
 
 ## Примеры использования
 
@@ -81,11 +94,28 @@ curl -H "Authorization: Bearer your-token" \
      http://localhost:8080/containers
 ```
 
-### Получение метрик контейнера
+### Фильтрация контейнеров по имени
 
 ```bash
+# Все контейнеры, содержащие "web"
 curl -H "Authorization: Bearer your-token" \
-     http://localhost:8080/containers/container-id/metrics
+     http://localhost:8080/containers?name_filter=*web*
+
+# Контейнеры, начинающиеся с "app"
+curl -H "Authorization: Bearer your-token" \
+     http://localhost:8080/containers?name_filter=app*
+```
+
+### Мониторинг конкретных контейнеров
+
+```bash
+# Получение информации о конкретных контейнерах
+curl -H "Authorization: Bearer your-token" \
+     "http://localhost:8080/monitored-containers?names=nginx,app-web,postgres-db"
+
+# Получение метрик конкретных контейнеров
+curl -H "Authorization: Bearer your-token" \
+     "http://localhost:8080/monitored-containers/metrics?names=nginx,app-web,postgres-db"
 ```
 
 ### Остановка контейнера

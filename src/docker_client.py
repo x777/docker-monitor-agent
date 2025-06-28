@@ -18,12 +18,37 @@ class DockerClient:
         except Exception as e:
             raise Exception(f"Failed to connect to Docker daemon: {e}")
     
-    def get_containers(self) -> List[Dict]:
-        """Get all containers (running and stopped)"""
+    def get_containers(self, name_filter: Optional[str] = None) -> List[Dict]:
+        """Get all containers (running and stopped) with optional name filtering"""
         containers = []
         
         try:
             for container in self.client.containers.list(all=True):
+                container_name = container.name
+                
+                # Apply name filter if provided
+                if name_filter:
+                    # Support wildcard matching (simple pattern)
+                    if name_filter.startswith('*') and name_filter.endswith('*'):
+                        # *pattern* - contains pattern
+                        pattern = name_filter[1:-1]
+                        if pattern.lower() not in container_name.lower():
+                            continue
+                    elif name_filter.startswith('*'):
+                        # *pattern - ends with pattern
+                        pattern = name_filter[1:]
+                        if not container_name.lower().endswith(pattern.lower()):
+                            continue
+                    elif name_filter.endswith('*'):
+                        # pattern* - starts with pattern
+                        pattern = name_filter[:-1]
+                        if not container_name.lower().startswith(pattern.lower()):
+                            continue
+                    else:
+                        # exact match or contains
+                        if name_filter.lower() not in container_name.lower():
+                            continue
+                
                 container_info = {
                     "id": container.id,
                     "name": container.name,

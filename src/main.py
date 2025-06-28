@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, status, Header
+from fastapi import FastAPI, HTTPException, Depends, status, Header, Query
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional, List
 import uvicorn
@@ -103,8 +103,11 @@ async def health_check():
 
 
 @app.get("/containers")
-async def get_containers(token: str = Depends(verify_token)):
-    """Get all containers"""
+async def get_containers(
+    name_filter: Optional[str] = None, 
+    token: str = Depends(verify_token)
+):
+    """Get all containers with optional name filtering"""
     if docker_client is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -112,7 +115,7 @@ async def get_containers(token: str = Depends(verify_token)):
         )
     
     try:
-        containers = docker_client.get_containers()
+        containers = docker_client.get_containers(name_filter=name_filter)
         return {"containers": containers}
     except Exception as e:
         raise HTTPException(
@@ -220,6 +223,81 @@ async def get_docker_info(token: str = Depends(verify_token)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get Docker info: {str(e)}"
+        )
+
+
+@app.get("/monitored-containers")
+async def get_monitored_containers(
+    names: str = Query(..., description="Comma-separated container names or patterns"),
+    token: str = Depends(verify_token)
+):
+    """Get specific containers for monitoring"""
+    if docker_client is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Docker client not available"
+        )
+    
+    try:
+        # Parse container names from query parameter
+        container_names = [name.strip() for name in names.split(',') if name.strip()]
+        
+        containers = []
+        for name_pattern in container_names:
+            filtered_containers = docker_client.get_containers(name_filter=name_pattern)
+            containers.extend(filtered_containers)
+        
+        # Remove duplicates by container ID
+        unique_containers = {}
+        for container in containers:
+            unique_containers[container['id']] = container
+        
+        return {
+            "containers": list(unique_containers.values()),
+            "monitored_patterns": container_names,
+            "total_found": len(unique_containers)
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get monitored containers: {str(e)}"
+        )
+
+
+@app.get("/monitored-containers/metrics")
+async def get_monitored_containers_metrics(
+    names: str = Query(..., description="Comma-separated container names or patterns"),
+    token: str = Depends(verify_token)
+):
+    """Get metrics for specific monitored containers"""
+    if docker_client is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Docker client not available"
+        )
+    
+    try:
+        # Parse container names from query parameter
+        container_names = [name.strip() for name in names.split(',') if name.strip()]
+        
+        all_metrics = []
+        for name_pattern in container_names:
+            containers = docker_client.get_containers(name_filter=name_pattern)
+            for container in containers:
+                metrics = docker_client.get_container_metrics(container['id'])
+                metrics['name'] = container['name']
+                metrics['status'] = container['status']
+                all_metrics.append(metrics)
+        
+        return {
+            "containers_metrics": all_metrics,
+            "monitored_patterns": container_names,
+            "total_containers": len(all_metrics)
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get monitored containers metrics: {str(e)}"
         )
 
 

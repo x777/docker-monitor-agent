@@ -73,8 +73,20 @@ def main():
     print("\n4. Testing containers endpoint:")
     test_endpoint("/containers")
     
+    # Test filtered containers endpoint
+    print("\n5. Testing filtered containers endpoint:")
+    test_endpoint("/containers?name_filter=agent")
+    
+    # Test monitored containers endpoint
+    print("\n6. Testing monitored containers endpoint:")
+    test_endpoint("/monitored-containers?names=agent,nginx")
+    
+    # Test monitored containers metrics endpoint
+    print("\n7. Testing monitored containers metrics endpoint:")
+    test_endpoint("/monitored-containers/metrics?names=agent,nginx")
+    
     # Test metrics endpoint (requires auth)
-    print("\n5. Testing metrics endpoint:")
+    print("\n8. Testing metrics endpoint:")
     test_endpoint("/metrics")
     
     print("\n" + "-" * 50)
